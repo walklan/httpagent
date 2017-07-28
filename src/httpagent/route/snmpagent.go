@@ -189,8 +189,9 @@ func Snmp(ip, community, oids, snmpversion string, timeout time.Duration, retry,
 
 	// col more times
 	for i := 0; i < count; i++ {
-		// snmp goroutine
-		data_c := make(chan SnmpResult, config.Asyncnum)
+		// 同一个sess的请求不再做goroutine, 否则可能出现错位, channel长度改为1
+		async_c := make(chan int, 1)
+		data_c := make(chan SnmpResult)
 		tasks := 0
 		for _, mib := range strings.Split(oids, "!") {
 			mo := strings.Split(mib, ":")
@@ -198,12 +199,12 @@ func Snmp(ip, community, oids, snmpversion string, timeout time.Duration, retry,
 			case "table":
 				for _, m := range strings.Split(mo[1], ",") {
 					tasks++
-					go Snmpgettable(data_c, m, snmpsess)
+					go Snmpgettable(async_c, data_c, m, snmpsess)
 				}
 			case "get":
 				for _, m := range strings.Split(mo[1], ",") {
 					tasks++
-					go Snmpget(data_c, m, snmpsess)
+					go Snmpget(async_c, data_c, m, snmpsess)
 				}
 			default:
 				// do nothing, because parameter check have been checked before
@@ -223,7 +224,9 @@ func Snmp(ip, community, oids, snmpversion string, timeout time.Duration, retry,
 	return snmpresult
 }
 
-func Snmpgettable(data_c chan SnmpResult, oid string, snmp *wsnmp.WapSNMP) {
+func Snmpgettable(async_c chan int, data_c chan SnmpResult, oid string, snmp *wsnmp.WapSNMP) {
+	async_c <- 1
+	defer func() { <-async_c }()
 	snmpresult := SnmpResult{Error: ""}
 	table, err := snmp.GetTable(wsnmp.MustParseOid(oid))
 	if err != nil || len(table) == 0 {
@@ -242,7 +245,9 @@ func Snmpgettable(data_c chan SnmpResult, oid string, snmp *wsnmp.WapSNMP) {
 	data_c <- snmpresult
 }
 
-func Snmpget(data_c chan SnmpResult, oid string, snmp *wsnmp.WapSNMP) {
+func Snmpget(async_c chan int, data_c chan SnmpResult, oid string, snmp *wsnmp.WapSNMP) {
+	async_c <- 1
+	defer func() { <-async_c }()
 	snmpresult := SnmpResult{Error: ""}
 	result, err := snmp.Get(wsnmp.MustParseOid(oid))
 	if err != nil {

@@ -65,11 +65,12 @@ func batchping(ip string) PingResult {
 	pingresult := PingResult{Error: "", Starttime: time.Now().Format("20060102150405.000")}
 
 	// 最大同时ping 100个地址
-	data_c := make(chan PingResult, 100)
+	async_c := make(chan int, 100)
+	data_c := make(chan PingResult)
 	tasks := 0
 	for _, addr := range strings.Split(ip, ",") {
 		tasks++
-		go PingAddr(data_c, addr)
+		go PingAddr(async_c, data_c, addr)
 	}
 	for task_i := 0; task_i < tasks; task_i++ {
 		pingtmp := <-data_c
@@ -83,7 +84,9 @@ func batchping(ip string) PingResult {
 	return pingresult
 }
 
-func PingAddr(data_c chan PingResult, addr string) {
+func PingAddr(async_c chan int, data_c chan PingResult, addr string) {
+	async_c <- 1
+	defer func() { <-async_c }()
 	status, lag := ping(addr)
 
 	pingresult := PingResult{Error: ""}
