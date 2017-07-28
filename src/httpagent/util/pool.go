@@ -33,24 +33,26 @@ func init() {
 }
 
 // 限定最大连接数
-func (sesspool *SessionPool) GetSession(ip, community string, version wsnmp.SNMPVersion, tt time.Duration, rt int) (*wsnmp.WapSNMP, error) {
+func (sesspool *SessionPool) GetSession(ip, community string, version wsnmp.SNMPVersion, tt time.Duration, rt int) (*wsnmp.WapSNMP, bool, error) {
 	var snmpsess *wsnmp.WapSNMP
 	var err error
+	cache := false
 	snmpSess, ok := sesspool.Sessions[ip]
 	if !ok || snmpSess.version != version || snmpSess.usingcnt >= 1 { // 当前的session正在使用则创建一个session，且不做缓存
 		if len(sesspool.Sessions) >= config.Maxsesspool {
-			return nil, errReachMaxconn
+			return nil, cache, errReachMaxconn
 		}
 		snmpsess, err = newsess(ip, community, version, tt, rt)
 	}
-	if ok {
-		snmpSess.lastaccesstime = time.Now()
-		snmpsess = snmpSess.Snmpsess
-	}
 
-	if err == nil && !ok {
+	if ok {
+		cache = true
+		snmpSess.lastaccesstime = time.Now()
+		snmpSess.usingcnt++
+		snmpsess = snmpSess.Snmpsess
+	} else {
 		// 小于最大连接维持数，则缓存连接池
-		if len(sesspool.Sessions) < config.Maxsesspool {
+		if err == nil && len(sesspool.Sessions) < config.Maxsesspool {
 			if config.Debug {
 				Debug("save snmp session:", ip)
 			}
@@ -58,15 +60,17 @@ func (sesspool *SessionPool) GetSession(ip, community string, version wsnmp.SNMP
 		}
 	}
 
-	return snmpsess, err
+	return snmpsess, cache, err
 }
 
-func (sesspool *SessionPool) DelUsingcnt(ip string) {
-	sesspool.mLock.Lock()
-	defer sesspool.mLock.Unlock()
-	snmpSess, ok := sesspool.Sessions[ip]
-	if ok {
-		snmpSess.usingcnt -= 1
+func (sesspool *SessionPool) DelUsingcnt(ip string, cache bool) {
+	if cache {
+		sesspool.mLock.Lock()
+		defer sesspool.mLock.Unlock()
+		snmpSess, ok := sesspool.Sessions[ip]
+		if ok {
+			snmpSess.usingcnt--
+		}
 	}
 }
 
@@ -75,7 +79,6 @@ func (sesspool *SessionPool) putSess(ip string, s *Session) {
 	defer sesspool.mLock.Unlock()
 	// 默认可用，超时清理时判断是否可用
 	s.lastaccesstime = time.Now()
-	s.usingcnt += 1
 	sesspool.Sessions[ip] = s
 }
 
@@ -119,6 +122,9 @@ func (sesspool *SessionPool) sessCleaner(maxlifetime time.Duration) {
 			if sess.lastaccesstime.Before(time.Now().Add(-maxlifetime)) {
 				sesspool.poolRemove(ip, sess)
 			} else {
+				if config.Debug {
+					Debug("ip:", ip, ", usingcnt:", sess.usingcnt)
+				}
 				// 判断当前session使用计数是否小于等于0，若是则测试session是否可用，不可用则删除
 				if sess.usingcnt <= 0 && !snmptest(sess.Snmpsess) {
 					sesspool.poolRemove(ip, sess)

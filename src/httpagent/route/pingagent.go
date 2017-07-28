@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// 最大同时ping 100个地址
-var _ping_async = make(chan int, 100)
-
 type PingResult struct {
 	Data      []PingUnit
 	Starttime string
@@ -67,11 +64,12 @@ func PingAgent(w http.ResponseWriter, r *http.Request) {
 func batchping(ip string) PingResult {
 	pingresult := PingResult{Error: "", Starttime: time.Now().Format("20060102150405.000")}
 
-	data_c := make(chan PingResult)
+	// 最大同时ping 100个地址
+	data_c := make(chan PingResult, 100)
 	tasks := 0
 	for _, addr := range strings.Split(ip, ",") {
-		go PingAddr(data_c, addr)
 		tasks++
+		go PingAddr(data_c, addr)
 	}
 	for task_i := 0; task_i < tasks; task_i++ {
 		pingtmp := <-data_c
@@ -86,9 +84,6 @@ func batchping(ip string) PingResult {
 }
 
 func PingAddr(data_c chan PingResult, addr string) {
-	_ping_async <- 1
-	defer func() { <-_ping_async }()
-
 	status, lag := ping(addr)
 
 	pingresult := PingResult{Error: ""}

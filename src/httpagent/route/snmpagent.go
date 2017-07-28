@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-var async_c = make(chan int, config.Asyncnum)
-
 const snmpgetfail = "snmp get failed"
 
 type SnmpResult struct {
@@ -181,8 +179,8 @@ func Snmp(ip, community, oids, snmpversion string, timeout time.Duration, retry,
 	}
 
 	// get snmp session from pool
-	snmpsess, err := util.SnmpSession.GetSession(ip, community, version, timeout, retry)
-	defer util.SnmpSession.DelUsingcnt(ip)
+	snmpsess, cache, err := util.SnmpSession.GetSession(ip, community, version, timeout, retry)
+	defer util.SnmpSession.DelUsingcnt(ip, cache)
 	if err != nil {
 		snmpresult.Error = fmt.Sprint(err)
 		util.Error(err)
@@ -192,7 +190,7 @@ func Snmp(ip, community, oids, snmpversion string, timeout time.Duration, retry,
 	// col more times
 	for i := 0; i < count; i++ {
 		// snmp goroutine
-		data_c := make(chan SnmpResult)
+		data_c := make(chan SnmpResult, config.Asyncnum)
 		tasks := 0
 		for _, mib := range strings.Split(oids, "!") {
 			mo := strings.Split(mib, ":")
@@ -226,8 +224,6 @@ func Snmp(ip, community, oids, snmpversion string, timeout time.Duration, retry,
 }
 
 func Snmpgettable(data_c chan SnmpResult, oid string, snmp *wsnmp.WapSNMP) {
-	async_c <- 1
-	defer func() { <-async_c }()
 	snmpresult := SnmpResult{Error: ""}
 	table, err := snmp.GetTable(wsnmp.MustParseOid(oid))
 	if err != nil || len(table) == 0 {
@@ -247,8 +243,6 @@ func Snmpgettable(data_c chan SnmpResult, oid string, snmp *wsnmp.WapSNMP) {
 }
 
 func Snmpget(data_c chan SnmpResult, oid string, snmp *wsnmp.WapSNMP) {
-	async_c <- 1
-	defer func() { <-async_c }()
 	snmpresult := SnmpResult{Error: ""}
 	result, err := snmp.Get(wsnmp.MustParseOid(oid))
 	if err != nil {
