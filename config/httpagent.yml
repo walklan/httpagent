@@ -10,3 +10,5 @@ http:
 log:
     - debug: false
     - logarchsize: 10485760
+ping:
+    - maxconcurrency: 500

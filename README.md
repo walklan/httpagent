@@ -18,10 +18,10 @@
 http://127.0.0.1:1216/snmpagent?seq=1111&ip=127.0.0.1&version=v2c&community=public&oids=get:.1.3.6.1.2.1.1.2.0!table:.1.3.6.1.2.1.31.1.1.1.1,.1.3.6.1.2.1.31.1.1.1.10
 ```
 
-* ping测试get方式, 最大同时ping100个地址
+* ping测试get方式, 支持重试次数retry参数, 不通的ip会重试retry次
 
 ```
-http://127.0.0.1:1216/pingagent?seq=1111&ip=192.168.1.1,192.168.1.2,192.168.1.3
+http://127.0.0.1:1216/pingagent?seq=1111&ip=192.168.1.1,192.168.1.2,192.168.1.3&retry=1
 ```
 
 * 返回结果示例
@@ -80,4 +80,6 @@ http:
 log:
     - debug: false           # debug
     - logarchsize: 10485760  # 日志归档大小, 单位byte
+ping:
+    - maxconcurrency: 500    # ping测试最大并发数
 ```

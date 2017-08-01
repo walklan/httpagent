@@ -44,15 +44,17 @@ func PingAgent(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	seq := r.Form.Get("seq")
 	ip := r.Form.Get("ip")
+	retryu := r.Form.Get("retry")
 
 	// paramter check
 	paramap := map[string]string{"seq": seq, "ip": ip}
 	err := ParameterCheckPing(paramap)
 	util.Info(paramap)
+	retry := Getretry(retryu, config.Pingretry)
 
 	var result PingResult
 	if err == "" {
-		result = batchping(ip)
+		result = batchping(ip, retry)
 	} else {
 		result = PingResult{Error: err}
 	}
@@ -61,14 +63,60 @@ func PingAgent(w http.ResponseWriter, r *http.Request) {
 	RouteJson(w, &result)
 }
 
-func batchping(ip string) PingResult {
+func batchping(ip string, pingretry int) PingResult {
 	pingresult := PingResult{Error: "", Starttime: time.Now().Format("20060102150405.000")}
 
-	// 最大同时ping 100个地址
-	async_c := make(chan int, 100)
+	pingresulttmp := doping(ip)
+	pingresult.Error = pingresulttmp.Error
+	pingresult.Data = pingresulttmp.Data
+
+	for i := 0; i < pingretry; i++ {
+		ippos := unreachableip(pingresult.Data)
+		if len(ippos) > 0 {
+			ipstr := ipjoin(ippos)
+			pingtmp := doping(ipstr)
+			for _, pu := range pingtmp.Data {
+				if pu.Status == 1 {
+					if pos, ok := ippos[pu.IP]; ok {
+						pingresult.Data[pos].Status = pu.Status
+						pingresult.Data[pos].Lag = pu.Lag
+					}
+				}
+			}
+		}
+	}
+
+	pingresult.Endtime = time.Now().Format("20060102150405.000")
+	return pingresult
+}
+
+func ipjoin(ippos map[string]int) string {
+	keys := make([]string, 0, len(ippos))
+	for k, _ := range ippos {
+		keys = append(keys, k)
+	}
+	return strings.Join(keys, ",")
+}
+
+func unreachableip(pulist []PingUnit) map[string]int {
+	ippos := make(map[string]int)
+	for p, pu := range pulist {
+		if pu.Status == 0 {
+			ippos[pu.IP] = p
+		}
+	}
+	return ippos
+}
+
+func doping(ips string) PingResult {
+	if config.Debug {
+		util.Debug("ping ip:", ips)
+	}
+	pingresult := PingResult{Error: ""}
+	async_c := make(chan int, config.Maxconcurrency)
 	data_c := make(chan PingResult)
 	tasks := 0
-	for _, addr := range strings.Split(ip, ",") {
+	for _, addr := range strings.Split(ips, ",") {
 		tasks++
 		go PingAddr(async_c, data_c, addr)
 	}
@@ -80,7 +128,6 @@ func batchping(ip string) PingResult {
 		}
 	}
 
-	pingresult.Endtime = time.Now().Format("20060102150405.000")
 	return pingresult
 }
 

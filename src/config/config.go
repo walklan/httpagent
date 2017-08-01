@@ -26,6 +26,10 @@ var Port string = "1216"
 // var Logdir string = "./"
 var Asyncnum int = 100
 
+// pingtest max concurrency
+var Maxconcurrency int = 100
+var Pingretry int = 0
+
 // default 100M
 var Logarchsize int64 = 104857600
 
@@ -86,10 +90,21 @@ func init() {
 			Asyncnum = m
 		}
 	}
-	// logdir
-	// logdir := GetKey("log.logdir", configmap)
-	// if logdir != "" {
-	// 	Logdir = logdir
+	// Maxconcurrency
+	maxconcurrency := GetKey("ping.maxconcurrency", configmap)
+	if maxconcurrency != "" {
+		m, err := strconv.Atoi(maxconcurrency)
+		if err == nil {
+			Maxconcurrency = m
+		}
+	}
+	// Pingretry
+	// pingretry := GetKey("ping.retry", configmap)
+	// if pingretry != "" {
+	// 	m, err := strconv.Atoi(pingretry)
+	// 	if err == nil {
+	// 		Pingretry = m
+	// 	}
 	// }
 
 	// logarchsize
