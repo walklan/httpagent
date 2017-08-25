@@ -136,6 +136,7 @@ func init() {
 	Logarchsize = *Logarchsizetmp
 	Maxlifetime = *Maxlifetimetmp
 	Timeout = *Timeouttmp
+	fmt.Printf("configs:\n\tPort = %v\n\tMaxsesspool = %v\n\tMaxlifetime = %v\n\tTimeout = %v\n\tRetry = %v\n\tDebug = %v\n\tMaxconcurrency = %v\n\tLogarchsize = %v\n", Port, Maxsesspool, Maxlifetime, Timeout, Retry, Debug, Maxconcurrency, Logarchsize)
 }
 
 // 需要做动态加载配置文件，放在主调程序做

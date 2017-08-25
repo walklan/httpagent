@@ -15,8 +15,8 @@ type WapSNMP struct {
 	Target    string        // Target device for these SNMP events.
 	Community string        // Community to use to contact the device.
 	Version   SNMPVersion   // SNMPVersion to encode in the packets.
-	timeout   time.Duration // Timeout to use for all SNMP packets.
-	retries   int           // Number of times to retry an operation.
+	Timeout   time.Duration // Timeout to use for all SNMP packets.
+	Retries   int           // Number of times to retry an operation.
 	conn      net.Conn      // Cache the UDP connection in the object.
 }
 
@@ -53,7 +53,7 @@ func RandomRequestID() int {
 }
 
 // poll sends a packet and wait for a response. Both operations can timeout, they're retried up to retries times.
-func poll(conn net.Conn, toSend []byte, respondBuffer []byte, retries int, timeout time.Duration) (int, error) {
+func poll(conn net.Conn, toSend []byte, respondBuffer []byte, retries int, timeout time.Duration) (int, error, int) {
 	var err error
 	for i := 0; i < retries+1; i++ {
 		deadline := time.Now().Add(timeout)
@@ -79,31 +79,31 @@ func poll(conn net.Conn, toSend []byte, respondBuffer []byte, retries int, timeo
 			continue
 		}
 
-		return numRead, nil
+		return numRead, nil, i
 	}
-	return 0, err
+	return 0, err, 0
 }
 
 // Get sends an SNMP get request requesting the value for an oid.
-func (w WapSNMP) Get(oid Oid) (interface{}, error) {
+func (w WapSNMP) Get(oid Oid) (interface{}, error, int) {
 	requestID := RandomRequestID()
 	req, err := EncodeSequence([]interface{}{Sequence, int(w.Version), w.Community,
 		[]interface{}{AsnGetRequest, requestID, 0, 0,
 			[]interface{}{Sequence,
 				[]interface{}{Sequence, oid, nil}}}})
 	if err != nil {
-		return nil, err
+		return nil, err, 0
 	}
 
 	response := make([]byte, bufSize, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, w.timeout)
+	numRead, err, retry := poll(w.conn, req, response, w.Retries, w.Timeout)
 	if err != nil {
-		return nil, err
+		return nil, err, retry
 	}
 
 	decodedResponse, err := DecodeSequence(response[:numRead])
 	if err != nil {
-		return nil, err
+		return nil, err, retry
 	}
 
 	// Fetch the varbinds out of the packet.
@@ -111,7 +111,7 @@ func (w WapSNMP) Get(oid Oid) (interface{}, error) {
 	varbinds := respPacket[4].([]interface{})
 	result := varbinds[1].([]interface{})[2]
 
-	return result, nil
+	return result, nil, retry
 }
 
 // GetMultiple issues a single GET SNMP request requesting multiple values
@@ -130,7 +130,7 @@ func (w WapSNMP) GetMultiple(oids []Oid) (map[string]interface{}, error) {
 	}
 
 	response := make([]byte, bufSize, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, w.timeout)
+	numRead, err, _ := poll(w.conn, req, response, w.Retries, w.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (w WapSNMP) Set(oid Oid, value interface{}) (interface{}, error) {
 	}
 
 	response := make([]byte, bufSize, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, w.timeout)
+	numRead, err, _ := poll(w.conn, req, response, w.Retries, w.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (w WapSNMP) SetMultiple(toset map[string]interface{}) (map[string]interface
 	}
 
 	response := make([]byte, bufSize, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, w.timeout)
+	numRead, err, _ := poll(w.conn, req, response, w.Retries, w.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func (w WapSNMP) GetNext(oid Oid) (*Oid, interface{}, error) {
 	}
 
 	response := make([]byte, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, w.timeout)
+	numRead, err, _ := poll(w.conn, req, response, w.Retries, w.Timeout)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -275,7 +275,7 @@ func (w WapSNMP) GetBulk(oid Oid, maxRepetitions int) (map[string]interface{}, e
 	}
 
 	response := make([]byte, bufSize, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, w.timeout)
+	numRead, err, _ := poll(w.conn, req, response, w.Retries, w.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -301,25 +301,25 @@ func (w WapSNMP) GetBulk(oid Oid, maxRepetitions int) (map[string]interface{}, e
 
 // GetBulkArray is the same as GetBulk, but returns it's results as a list, for those who want deterministic
 // iteration instead of convenient access.
-func (w WapSNMP) GetBulkArray(oid Oid, maxRepetitions int) ([]SNMPValue, error) {
+func (w WapSNMP) GetBulkArray(oid Oid, maxRepetitions int) ([]SNMPValue, error, int) {
 	requestID := RandomRequestID()
 	req, err := EncodeSequence([]interface{}{Sequence, int(w.Version), w.Community,
 		[]interface{}{AsnGetBulkRequest, requestID, 0, maxRepetitions,
 			[]interface{}{Sequence,
 				[]interface{}{Sequence, oid, nil}}}})
 	if err != nil {
-		return nil, err
+		return nil, err, 0
 	}
 
 	response := make([]byte, bufSize, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, w.timeout)
+	numRead, err, retry := poll(w.conn, req, response, w.Retries, w.Timeout)
 	if err != nil {
-		return nil, err
+		return nil, err, retry
 	}
 
 	decodedResponse, err := DecodeSequence(response[:numRead])
 	if err != nil {
-		return nil, fmt.Errorf("error during sequence decoding: %v", err)
+		return nil, fmt.Errorf("error during sequence decoding: %v", err), retry
 	}
 
 	// Find the varbinds
@@ -333,17 +333,21 @@ func (w WapSNMP) GetBulkArray(oid Oid, maxRepetitions int) ([]SNMPValue, error) 
 		result = append(result, SNMPValue{oid, value})
 	}
 
-	return result, nil
+	return result, nil, retry
 }
 
 // GetTable efficiently gets an entire table from an SNMP agent. Uses GETBULK requests to go fast.
-func (w WapSNMP) GetTable(oid Oid) (map[string]interface{}, error) {
+func (w WapSNMP) GetTable(oid Oid) (map[string]interface{}, error, int) {
 	result := make(map[string]interface{})
+	retry := 0
 	lastOid := oid.Copy()
 	for lastOid.Within(oid) {
-		results, err := w.GetBulkArray(lastOid, 50)
+		results, err, r := w.GetBulkArray(lastOid, 50)
+		if r > retry {
+			retry = r
+		}
 		if err != nil {
-			return nil, fmt.Errorf("received GetBulk error => %v\n", err)
+			return nil, fmt.Errorf("received GetBulk error => %v\n", err), r
 		}
 		newLastOid := lastOid.Copy()
 		for _, v := range results {
@@ -359,7 +363,7 @@ func (w WapSNMP) GetTable(oid Oid) (map[string]interface{}, error) {
 		}
 		lastOid = newLastOid
 	}
-	return result, nil
+	return result, nil, retry
 }
 
 // Close the net.conn in WapSNMP.
