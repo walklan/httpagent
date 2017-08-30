@@ -1,7 +1,7 @@
 采集机http代理
 ====
 
-采集机http代理服务端, 接收http的get或post请求, 实现snmp采集和批量ping测试, 返回json格式数据
+采集机http代理服务端, 接收http的get或post请求, 实现snmp(支持v2c和v3)采集和批量ping测试, 返回json格式数据
 
 启动方式
 ----
@@ -14,9 +14,14 @@
 ----
 
 * snmp采集get方式
-```
-http://127.0.0.1:1216/snmpagent?seq=1111&ip=127.0.0.1&version=v2c&community=public&oids=get:.1.3.6.1.2.1.1.2.0!table:.1.3.6.1.2.1.31.1.1.1.1,.1.3.6.1.2.1.31.1.1.1.10
-```
+    * snmpv2c
+    ```
+    http://127.0.0.1:1216/snmpagent?seq=1111&ip=127.0.0.1&version=v2c&community=public&oids=get:.1.3.6.1.2.1.1.2.0!table:.1.3.6.1.2.1.31.1.1.1.1,.1.3.6.1.2.1.31.1.1.1.10
+    ```
+    * snmpv3
+    ```
+    http://127.0.0.1:1216/snmpagent?seq=1111&ip=127.0.0.1&version=v3&username=aaa&securitylevel=authpriv&authpass=bbb&authprotcol=md5&privpass=ccc&privprotcol=des&oids=get:.1.3.6.1.2.1.1.2.0!table:.1.3.6.1.2.1.31.1.1.1.1,.1.3.6.1.2.1.31.1.1.1.10
+    ```
 
 * ping测试get方式, 支持重试次数retry参数, 不通的ip会重试retry次
 
@@ -70,7 +75,7 @@ http://127.0.0.1:1216/pingagent?seq=1111&ip=192.168.1.1,192.168.1.2,192.168.1.3&
 
 ```
 snmp:
-    - asyncnum: 10           # snmp并发数
+    - asyncnum: 10           # snmp并发数, 不再使用
     - timeout: 2             # 系统级超时, 支持请求级超时
     - retry: 1               # 系统级重试此时, 支持请求级重试
     - maxsesspool: 1000      # 最大支持session数
