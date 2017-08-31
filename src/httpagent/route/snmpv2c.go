@@ -36,7 +36,7 @@ func Snmpv2c(seq, ip, community, oids, snmpversion string, timeout time.Duration
 		util.Error(seq, ip, oids, err)
 		return snmpresult
 	}
-	if config.Debug {
+	if config.Cfg.Debug {
 		util.Debug(ip, oids, snmpsess, cacheflag)
 	}
 
@@ -90,7 +90,7 @@ func Snmpv2cwalk(seq string, async_c chan int, data_c chan SnmpResult, oid strin
 		return
 	}
 	for k, v := range table {
-		if config.Debug {
+		if config.Cfg.Debug {
 			util.Debug(seq, snmp.Target, k, v)
 		}
 		snmpresult.Data = append(snmpresult.Data, UnitResult{k, fmt.Sprint(v), ""})
@@ -121,7 +121,7 @@ func Snmpv2cget(seq string, async_c chan int, data_c chan SnmpResult, oid string
 		data_c <- snmpresult
 		return
 	default:
-		if config.Debug {
+		if config.Cfg.Debug {
 			util.Debug(seq, snmp.Target, oid, result)
 		}
 		snmpresult.Data = append(snmpresult.Data, UnitResult{oid, fmt.Sprint(result), ""})
@@ -129,7 +129,7 @@ func Snmpv2cget(seq string, async_c chan int, data_c chan SnmpResult, oid string
 	data_c <- snmpresult
 
 	if retry > 0 {
-		if config.Debug {
+		if config.Cfg.Debug {
 			util.Debug(snmp.Target, oid, "retry:", retry, "cflag:", cflag)
 		}
 		resetSess(snmp, cflag)
@@ -144,7 +144,7 @@ func resetSess(snmp *wsnmp.WapSNMP, cflag *int) {
 	// 修改snmpsess和cflag值
 	*snmp = *snmpsess
 	*cflag = cacheflag
-	if config.Debug {
+	if config.Cfg.Debug {
 		util.Debug("snmp retry, reset session:", snmp.Target, snmp, "cflag:", cflag)
 	}
 }

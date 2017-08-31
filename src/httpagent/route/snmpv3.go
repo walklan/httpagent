@@ -125,7 +125,7 @@ func Snmpv3get(seq string, async_c chan int, data_c chan SnmpResult, oid string,
 
 	// get VarBind list
 	for _, v := range pdu.VarBinds() {
-		if config.Debug {
+		if config.Cfg.Debug {
 			util.Debug(seq, snmp.GetArgs().Address, v.Oid, v.Variable)
 		}
 		snmpresult.Data = append(snmpresult.Data, UnitResult{fmt.Sprint(v.Oid), fmt.Sprint(v.Variable), ""})

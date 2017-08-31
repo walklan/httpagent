@@ -10,30 +10,32 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 var cfgfile string = filepath.Dir(os.Args[0]) + "/../config/httpagent.yml"
 
-// system level config interface
-var Maxsesspool int = 1000
-var Maxlifetime time.Duration = 30 * time.Second
-var Timeout time.Duration = 2 * time.Second
-var Retry int = 1
-var Debug bool = false
-var Port string = "1216"
+var Cfg = &Config{cLock: &sync.Mutex{}, Maxsesspool: 1000, Maxlifetime: 30 * time.Second, Timeout: 2 * time.Second, Retry: 1, Debug: false, Port: "1216", Maxconcurrency: 100, Logarchsize: 104857600, Daemon: false, Pingretry: 0}
 
-// var Logdir string = "./"
-var Asyncnum int = 100
+type Config struct {
+	cLock          *sync.Mutex
+	Maxsesspool    int
+	Maxlifetime    time.Duration
+	Timeout        time.Duration
+	Retry          int
+	Debug          bool
+	Port           string
+	Maxconcurrency int
+	Logarchsize    int64
+	Pingretry      int
+	Daemon         bool
+	Signal         *string
+}
 
-// pingtest max concurrency
-var Maxconcurrency int = 100
-var Pingretry int = 0
-
-// default 100M
-var Logarchsize int64 = 104857600
-
-func init() {
+func (c *Config) Loadconfig() {
+	c.cLock.Lock()
+	defer c.cLock.Unlock()
 	configmap, err := GetConfig()
 	if err != nil {
 		log.Println(err)
@@ -42,14 +44,14 @@ func init() {
 	// port
 	port := GetKey("http.port", configmap)
 	if port != "" {
-		Port = port
+		c.Port = port
 	}
 	// timeout
 	timeout := GetKey("snmp.timeout", configmap)
 	if timeout != "" {
 		t, err := strconv.Atoi(timeout)
 		if err == nil {
-			Timeout = time.Duration(t) * time.Second
+			c.Timeout = time.Duration(t) * time.Second
 		}
 	}
 	// retry
@@ -57,20 +59,22 @@ func init() {
 	if retry != "" {
 		r, err := strconv.Atoi(retry)
 		if err == nil {
-			Retry = r
+			c.Retry = r
 		}
 	}
 	// debug
 	debug := GetKey("log.debug", configmap)
 	if debug == "true" || debug == "yes" {
-		Debug = true
+		c.Debug = true
+	} else {
+		c.Debug = false
 	}
 	// Maxsesspool
 	maxsesspool := GetKey("snmp.maxsesspool", configmap)
 	if maxsesspool != "" {
 		m, err := strconv.Atoi(maxsesspool)
 		if err == nil {
-			Maxsesspool = m
+			c.Maxsesspool = m
 		}
 	}
 	// Maxlifetime
@@ -78,65 +82,56 @@ func init() {
 	if maxlifetime != "" {
 		t, err := strconv.Atoi(maxlifetime)
 		if err == nil {
-			Maxlifetime = time.Duration(t) * time.Second
+			c.Maxlifetime = time.Duration(t) * time.Second
 		}
 	}
 
-	// Asyncnum
-	asyncnum := GetKey("snmp.asyncnum", configmap)
-	if asyncnum != "" {
-		m, err := strconv.Atoi(asyncnum)
-		if err == nil {
-			Asyncnum = m
-		}
-	}
 	// Maxconcurrency
 	maxconcurrency := GetKey("ping.maxconcurrency", configmap)
 	if maxconcurrency != "" {
 		m, err := strconv.Atoi(maxconcurrency)
 		if err == nil {
-			Maxconcurrency = m
+			c.Maxconcurrency = m
 		}
 	}
-	// Pingretry
-	// pingretry := GetKey("ping.retry", configmap)
-	// if pingretry != "" {
-	// 	m, err := strconv.Atoi(pingretry)
-	// 	if err == nil {
-	// 		Pingretry = m
-	// 	}
-	// }
 
 	// logarchsize
 	logarchsize := GetKey("log.logarchsize", configmap)
 	if logarchsize != "" {
 		las, err := strconv.ParseInt(logarchsize, 10, 64)
 		if err == nil {
-			Logarchsize = las
+			c.Logarchsize = las
 		}
 	}
+	fmt.Printf("configs:\n\tPort = %v\n\tMaxsesspool = %v\n\tMaxlifetime = %v\n\tTimeout = %v\n\tRetry = %v\n\tDebug = %v\n\tMaxconcurrency = %v\n\tLogarchsize = %v\n\tDaemon = %v\n", c.Port, c.Maxsesspool, c.Maxlifetime, c.Timeout, c.Retry, c.Debug, c.Maxconcurrency, c.Logarchsize, c.Daemon)
+}
+
+func init() {
+	Cfg.Loadconfig()
 
 	// 命令行参数
-	Porttmp := flag.String("port", Port, "http listen port")
-	Retrytmp := flag.Int("retry", Retry, "snmp retry times")
-	Asyncnumtmp := flag.Int("asyncnum", Asyncnum, "snmp asyncnum")
-	Debugtmp := flag.Bool("debug", Debug, "debug")
-	// Logdirtmp := flag.String("logdir", Logdir, "log directory")
-	Maxsesspooltmp := flag.Int("maxsesspool", Maxsesspool, "snmp maxsesspool")
-	Logarchsizetmp := flag.Int64("logarchsize", Logarchsize, "logarchsize")
-	Maxlifetimetmp := flag.Duration("maxlifetime", Maxlifetime, "snmp maxlifetime")
-	Timeouttmp := flag.Duration("timeout", Timeout, "snmp timeout")
+	Porttmp := flag.String("port", Cfg.Port, "http listen port")
+	Retrytmp := flag.Int("retry", Cfg.Retry, "snmp retry times")
+	Debugtmp := flag.Bool("debug", Cfg.Debug, "debug")
+	Maxsesspooltmp := flag.Int("maxsesspool", Cfg.Maxsesspool, "snmp maxsesspool")
+	Logarchsizetmp := flag.Int64("logarchsize", Cfg.Logarchsize, "logarchsize")
+	Maxlifetimetmp := flag.Duration("maxlifetime", Cfg.Maxlifetime, "snmp maxlifetime")
+	Timeouttmp := flag.Duration("timeout", Cfg.Timeout, "snmp timeout")
+	Cfg.Signal = flag.String("s", "", `send signal to the daemon
+	quit - graceful shutdown
+	stop - fast shutdown
+	reload - reloading the configuration file`)
+	Daemontmp := flag.Bool("daemon", Cfg.Daemon, "daemon")
 	flag.Parse()
-	Port = *Porttmp
-	Retry = *Retrytmp
-	Asyncnum = *Asyncnumtmp
-	Debug = *Debugtmp
+	Cfg.Port = *Porttmp
+	Cfg.Retry = *Retrytmp
+	Cfg.Debug = *Debugtmp
 	// Logdir = *Logdirtmp
-	Maxsesspool = *Maxsesspooltmp
-	Logarchsize = *Logarchsizetmp
-	Maxlifetime = *Maxlifetimetmp
-	Timeout = *Timeouttmp
-	fmt.Printf("configs:\n\tPort = %v\n\tMaxsesspool = %v\n\tMaxlifetime = %v\n\tTimeout = %v\n\tRetry = %v\n\tDebug = %v\n\tMaxconcurrency = %v\n\tLogarchsize = %v\n", Port, Maxsesspool, Maxlifetime, Timeout, Retry, Debug, Maxconcurrency, Logarchsize)
+	Cfg.Maxsesspool = *Maxsesspooltmp
+	Cfg.Logarchsize = *Logarchsizetmp
+	Cfg.Maxlifetime = *Maxlifetimetmp
+	Cfg.Timeout = *Timeouttmp
+	Cfg.Daemon = *Daemontmp
 }
 
 // 需要做动态加载配置文件，放在主调程序做

@@ -50,7 +50,7 @@ func PingAgent(w http.ResponseWriter, r *http.Request) {
 	paramap := map[string]string{"seq": seq, "ip": ip}
 	err := ParameterCheckPing(paramap)
 	util.Info(paramap)
-	retry := Getretry(retryu, config.Pingretry)
+	retry := Getretry(retryu, config.Cfg.Pingretry)
 
 	var result PingResult
 	if err == "" {
@@ -109,11 +109,11 @@ func unreachableip(pulist []PingUnit) map[string]int {
 }
 
 func doping(ips string) PingResult {
-	if config.Debug {
+	if config.Cfg.Debug {
 		util.Debug("ping ip:", ips)
 	}
 	pingresult := PingResult{Error: ""}
-	async_c := make(chan int, config.Maxconcurrency)
+	async_c := make(chan int, config.Cfg.Maxconcurrency)
 	data_c := make(chan PingResult)
 	tasks := 0
 	for _, addr := range strings.Split(ips, ",") {
@@ -160,7 +160,7 @@ func ping(ip string) (int, string) {
 	p.AddIPAddr(ra)
 
 	p.OnRecv = func(addr *net.IPAddr, rtt time.Duration) {
-		if config.Debug {
+		if config.Cfg.Debug {
 			util.Debug("IP Addr: " + addr.String() + " receive, RTT: " + rtt.String())
 		}
 		lag = rtt.String()

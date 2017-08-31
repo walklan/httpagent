@@ -130,7 +130,7 @@ func (a *Logger) logmonitor() {
 }
 
 func (a *Logger) fileswitch() bool {
-	if filesize(a.Logfile) >= config.Logarchsize {
+	if filesize(a.Logfile) >= config.Cfg.Logarchsize {
 		return true
 	}
 	return false

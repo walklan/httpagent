@@ -86,8 +86,8 @@ func SnmpAgent(w http.ResponseWriter, r *http.Request) {
 
 	var result SnmpResult
 	if err == "" {
-		timeout := Gettimeout(timeoutu, config.Timeout)
-		retry := Getretry(retryu, config.Retry)
+		timeout := Gettimeout(timeoutu, config.Cfg.Timeout)
+		retry := Getretry(retryu, config.Cfg.Retry)
 		interval := GetparaStrtoInt(intervalu, 1)
 		count := GetparaStrtoInt(countu, 1)
 		if count <= 1 {

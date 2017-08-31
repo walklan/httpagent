@@ -30,7 +30,7 @@ var SessPool = &SessionPool{Sessions: make(map[string]*[MaxIdleSess]*Session), m
 func init() {
 	var once sync.Once
 	// 启动定时器清理session池
-	once.Do(func() { go SessPool.cleaner(config.Maxlifetime) })
+	once.Do(func() { go SessPool.cleaner(config.Cfg.Maxlifetime) })
 }
 
 // 限定最大连接数
@@ -38,7 +38,7 @@ func (sp *SessionPool) Get(ip, community string, version wsnmp.SNMPVersion, tt t
 	var snmpsess *wsnmp.WapSNMP
 	var err error
 
-	if sp.PoolLen() >= config.Maxsesspool {
+	if sp.PoolLen() >= config.Cfg.Maxsesspool {
 		return nil, -1, errReachMaxconn
 	}
 
@@ -48,8 +48,8 @@ func (sp *SessionPool) Get(ip, community string, version wsnmp.SNMPVersion, tt t
 		// 未从缓存中取到sess, 新建连接
 		snmpsess, err = NewSess(ip, community, version, tt, rt)
 		// 小于最大连接维持数，则缓存连接池
-		if err == nil && sp.PoolLen() < config.Maxsesspool {
-			if config.Debug {
+		if err == nil && sp.PoolLen() < config.Cfg.Maxsesspool {
+			if config.Cfg.Debug {
 				Debug("save snmp session:", ip)
 			}
 			c = sp.Save(ip, &Session{Sess: snmpsess})
@@ -127,7 +127,7 @@ func (sp *SessionPool) Unavailable(ip string, c int) {
 
 func (sp *SessionPool) remove(ip string, s *Session, i int) {
 	// remove前需要加锁
-	if config.Debug {
+	if config.Cfg.Debug {
 		Debug(s.Atime, time.Now())
 		Debug("snmp session expired:", ip)
 	}
@@ -151,7 +151,7 @@ func (sp *SessionPool) cleaner(maxlifetime time.Duration) {
 					if sess.Atime.Before(time.Now().Add(-maxlifetime)) {
 						sp.remove(ip, sess, i)
 					} else {
-						if config.Debug {
+						if config.Cfg.Debug {
 							Debug("ip:", ip, ", Idle:", sess.Idle, ", index:", i)
 						}
 						// 判断当前session使用计数是否在使用，若未使用则测试session是否可用(若不可用则删除)，若使用则不进行测试
@@ -170,7 +170,7 @@ func (sp *SessionPool) cleaner(maxlifetime time.Duration) {
 
 func snmptest(s *wsnmp.WapSNMP) bool {
 	r, err, _ := s.Get(testoid)
-	if config.Debug {
+	if config.Cfg.Debug {
 		Debug("snmptest", r)
 	}
 	if err != nil {
