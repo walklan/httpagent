@@ -7,7 +7,7 @@
 ----
 
 ```
-./httpservice.sh start|stop|quit|restart|reload
+./bin/httpserv.sh start|stop|quit|restart|reload
 ```
 
 使用方法
