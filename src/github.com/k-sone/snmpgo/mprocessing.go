@@ -7,7 +7,7 @@ import (
 
 type messageProcessing interface {
 	Version() SNMPVersion
-	PrepareOutgoingMessage(security, Pdu, *SNMPArguments) (message, error)
+	PrepareOutgoingMessage(security, Pdu, *SNMPArguments, int) (message, error)
 	PrepareResponseMessage(security, Pdu, message) (message, error)
 	PrepareDataElements(security, message, message) (Pdu, error)
 }
@@ -21,7 +21,7 @@ func (mp *messageProcessingV1) Version() SNMPVersion {
 }
 
 func (mp *messageProcessingV1) PrepareOutgoingMessage(
-	sec security, pdu Pdu, args *SNMPArguments) (message, error) {
+	sec security, pdu Pdu, args *SNMPArguments, cretry int) (message, error) {
 
 	_, ok := pdu.(*PduV1)
 	if !ok {
@@ -30,7 +30,9 @@ func (mp *messageProcessingV1) PrepareOutgoingMessage(
 			Message: "Type of Pdu is not PduV1",
 		}
 	}
-	pdu.SetRequestId(genRequestId())
+	if cretry < 1 {
+		pdu.SetRequestId(genRequestId())
+	}
 	msg := newMessageWithPdu(mp.Version(), pdu)
 
 	if err := sec.GenerateRequestMessage(msg); err != nil {
@@ -109,7 +111,7 @@ func (mp *messageProcessingV3) Version() SNMPVersion {
 }
 
 func (mp *messageProcessingV3) PrepareOutgoingMessage(
-	sec security, pdu Pdu, args *SNMPArguments) (message, error) {
+	sec security, pdu Pdu, args *SNMPArguments, cretry int) (message, error) {
 
 	p, ok := pdu.(*ScopedPdu)
 	if !ok {
@@ -118,7 +120,9 @@ func (mp *messageProcessingV3) PrepareOutgoingMessage(
 			Message: "Type of Pdu is not ScopedPdu",
 		}
 	}
-	p.SetRequestId(genRequestId())
+	if cretry < 1 {
+		p.SetRequestId(genRequestId())
+	}
 	if args.ContextEngineId != "" {
 		p.ContextEngineId, _ = engineIdToBytes(args.ContextEngineId)
 	} else {

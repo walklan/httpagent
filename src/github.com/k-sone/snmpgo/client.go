@@ -316,10 +316,24 @@ func (s *SNMP) sendPdu(pdu Pdu) (result Pdu, err error) {
 		return
 	}
 
-	retry(int(s.args.Retries), func() error {
-		result, err = s.engine.SendPdu(pdu, s.conn, s.args)
-		return err
-	})
+	for i := 0; i <= int(s.args.Retries); i++ {
+		result, err = s.engine.SendPdu(pdu, s.conn, s.args, i)
+		switch e := err.(type) {
+		case net.Error:
+			if e.Timeout() {
+				continue
+			}
+		case *notInTimeWindowError:
+			err = e.error
+			continue
+		}
+		return
+	}
+
+	// retry(int(s.args.Retries), func() error {
+	// 	result, err = s.engine.SendPdu(pdu, s.conn, s.args)
+	// 	return err
+	// })
 	return
 }
 

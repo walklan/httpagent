@@ -11,14 +11,14 @@ type snmpEngine struct {
 	sec security
 }
 
-func (e *snmpEngine) SendPdu(pdu Pdu, conn net.Conn, args *SNMPArguments) (result Pdu, err error) {
+func (e *snmpEngine) SendPdu(pdu Pdu, conn net.Conn, args *SNMPArguments, cretry int) (result Pdu, err error) {
 	size := args.MessageMaxSize
 	if size < recvBufferSize {
 		size = recvBufferSize
 	}
 
 	var sendMsg message
-	sendMsg, err = e.mp.PrepareOutgoingMessage(e.sec, pdu, args)
+	sendMsg, err = e.mp.PrepareOutgoingMessage(e.sec, pdu, args, cretry)
 	if err != nil {
 		return
 	}

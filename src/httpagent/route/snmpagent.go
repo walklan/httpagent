@@ -94,11 +94,7 @@ func SnmpAgent(w http.ResponseWriter, r *http.Request) {
 			interval = 0
 		}
 		// log.Println(timeoutu, config.Timeout, retryu, config.Retry, timeout, retry)
-		if version == "v3" {
-			result = Snmpv3(seq, ip, oids, version, timeout, retry, interval, count, username, securitylevel, authpass, authprotcol, privpass, privprotcol)
-		} else {
-			result = Snmpv2c(seq, ip, community, oids, version, timeout, retry, interval, count)
-		}
+		result = SnmpCol(seq, ip, community, oids, version, timeout, retry, interval, count, username, securitylevel, authpass, authprotcol, privpass, privprotcol)
 
 		if count > 1 {
 			pos := 0

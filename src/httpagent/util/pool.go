@@ -3,12 +3,12 @@ package util
 import (
 	"config"
 	"errors"
-	wsnmp "github.com/cdevr/wapsnmp"
+	"github.com/k-sone/snmpgo"
 	"sync"
 	"time"
 )
 
-var testoid = wsnmp.MustParseOid(".1.3.6.1.2.1.1.2.0")
+var testoid, _ = snmpgo.NewOids([]string{".1.3.6.1.2.1.1.2.0"})
 
 var errReachMaxconn = errors.New("snmpagent: reach max snmp connections")
 
@@ -20,7 +20,7 @@ type SessionPool struct {
 }
 
 type Session struct {
-	Sess  *wsnmp.WapSNMP
+	Sess  *snmpgo.SNMP
 	Idle  bool      // 是否空闲
 	Atime time.Time // 上次使用时间
 }
@@ -34,8 +34,8 @@ func init() {
 }
 
 // 限定最大连接数
-func (sp *SessionPool) Get(ip, community string, version wsnmp.SNMPVersion, tt time.Duration, rt int) (*wsnmp.WapSNMP, int, error) {
-	var snmpsess *wsnmp.WapSNMP
+func (sp *SessionPool) Get(seq, ip string, args snmpgo.SNMPArguments) (*snmpgo.SNMP, int, error) {
+	var snmpsess *snmpgo.SNMP
 	var err error
 
 	if sp.PoolLen() >= config.Cfg.Maxsesspool {
@@ -46,16 +46,24 @@ func (sp *SessionPool) Get(ip, community string, version wsnmp.SNMPVersion, tt t
 
 	if c < 0 {
 		// 未从缓存中取到sess, 新建连接
-		snmpsess, err = NewSess(ip, community, version, tt, rt)
+		snmpsess, err = snmpgo.NewSNMP(args)
 		// 小于最大连接维持数，则缓存连接池
 		if err == nil && sp.PoolLen() < config.Cfg.Maxsesspool {
+			sesserr := snmpsess.Open()
+			if sesserr != nil {
+				return nil, -1, sesserr
+			}
+
 			if config.Cfg.Debug {
-				Debug("save snmp session:", ip)
+				Debug(seq, "cache session:", ip)
 			}
 			c = sp.Save(ip, &Session{Sess: snmpsess})
 		}
 	} else {
 		// 当前sess赋值
+		if config.Cfg.Debug {
+			Debug(seq, "get session from cache:", ip, c)
+		}
 		snmpsess = snmpSess.Sess
 	}
 
@@ -100,7 +108,7 @@ func (sp *SessionPool) Save(ip string, sess *Session) int {
 	return 0
 }
 
-func (sp *SessionPool) Free(ip string, c int) {
+func (sp *SessionPool) Free(seq, ip string, c int) {
 	if c >= 0 {
 		sp.mLock.Lock()
 		defer sp.mLock.Unlock()
@@ -108,6 +116,9 @@ func (sp *SessionPool) Free(ip string, c int) {
 			if seeslist[c] != nil {
 				seeslist[c].Atime = time.Now()
 				seeslist[c].Idle = true
+				if config.Cfg.Debug {
+					Debug(seq, "session free:", ip, c)
+				}
 			}
 		}
 	}
@@ -120,6 +131,20 @@ func (sp *SessionPool) Unavailable(ip string, c int) {
 		if seeslist, ok := sp.Sessions[ip]; ok {
 			if seeslist[c] != nil {
 				seeslist[c].Idle = false
+			}
+		}
+	}
+}
+
+func (sp *SessionPool) Kick(seq, ip string, c int) {
+	if c >= 0 {
+		sp.mLock.Lock()
+		defer sp.mLock.Unlock()
+		if seeslist, ok := sp.Sessions[ip]; ok {
+			seeslist[c].Sess.Close()
+			seeslist[c] = nil
+			if config.Cfg.Debug {
+				Debug(seq, "kick error cache session:", ip, c)
 			}
 		}
 	}
@@ -168,19 +193,16 @@ func (sp *SessionPool) cleaner(maxlifetime time.Duration) {
 	}
 }
 
-func snmptest(s *wsnmp.WapSNMP) bool {
-	r, err, _ := s.Get(testoid)
+func snmptest(s *snmpgo.SNMP) bool {
 	if config.Cfg.Debug {
-		Debug("snmptest", r)
+		Debug("snmptest", testoid)
 	}
-	if err != nil {
+	pdu, err := s.GetRequest(testoid)
+	if pdu == nil || err != nil || pdu.ErrorStatus() != snmpgo.NoError {
 		return false
 	}
+	if config.Cfg.Debug {
+		Debug("snmptest", pdu.VarBinds())
+	}
 	return true
-}
-
-func NewSess(ip, community string, version wsnmp.SNMPVersion, tt time.Duration, rt int) (*wsnmp.WapSNMP, error) {
-	snmpsess, err := wsnmp.NewWapSNMP(ip, community, version, tt, rt)
-	Info("create snmp session:", ip)
-	return snmpsess, err
 }
