@@ -2,8 +2,8 @@ package route
 
 import (
 	"config"
+	"github.com/tatsushid/go-fastping"
 	"httpagent/util"
-	"httpagent/util/fastping"
 	"net"
 	"net/http"
 	"strings"
